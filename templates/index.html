@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mein Planer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css"/>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">✦</span>
+        <span class="logo-text">Planer</span>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-btn active" data-tab="todos">
+          <span class="nav-icon">◈</span>
+          <span>Aufgaben</span>
+        </button>
+        <button class="nav-btn" data-tab="calendar">
+          <span class="nav-icon">◉</span>
+          <span>Kalender</span>
+        </button>
+      </nav>
+      <div class="sidebar-stats" id="sidebarStats">
+        <div class="stat-item">
+          <span class="stat-num" id="statTotal">0</span>
+          <span class="stat-label">Gesamt</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num" id="statDone">0</span>
+          <span class="stat-label">Erledigt</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num" id="statUrgent">0</span>
+          <span class="stat-label">Dringend</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- ── TODO TAB ── -->
+      <section id="tab-todos" class="tab-content active">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Aufgaben</h1>
+            <p class="page-subtitle">Verwalte deine Aufgaben und Prioritäten</p>
+          </div>
+          <button class="btn-primary" id="btnAddTodo">+ Neue Aufgabe</button>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+          <button class="filter-btn active" data-filter="all">Alle</button>
+          <button class="filter-btn" data-filter="5">★★★★★</button>
+          <button class="filter-btn" data-filter="4">★★★★</button>
+          <button class="filter-btn" data-filter="3">★★★</button>
+          <button class="filter-btn" data-filter="2">★★</button>
+          <button class="filter-btn" data-filter="1">★</button>
+          <button class="filter-btn" data-filter="pending">Offen</button>
+          <button class="filter-btn" data-filter="done">Erledigt</button>
+        </div>
+
+        <!-- Todo List -->
+        <div class="todo-list" id="todoList">
+          <div class="empty-state" id="todoEmpty">
+            <div class="empty-icon">◈</div>
+            <p>Noch keine Aufgaben. Erstelle deine erste!</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── CALENDAR TAB ── -->
+      <section id="tab-calendar" class="tab-content">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Kalender</h1>
+            <p class="page-subtitle" id="calendarSubtitle">Woche planen</p>
+          </div>
+          <div class="calendar-controls">
+            <button class="btn-ghost" id="btnPrev">‹</button>
+            <button class="btn-ghost btn-today" id="btnToday">Heute</button>
+            <button class="btn-ghost" id="btnNext">›</button>
+            <div class="view-toggle">
+              <button class="view-btn active" data-view="week">Woche</button>
+              <button class="view-btn" data-view="month">Monat</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Todo Tray for Dragging -->
+        <div class="todo-tray" id="todoTray">
+          <div class="tray-header">
+            <span>Aufgaben ziehen ↓</span>
+            <button class="tray-toggle" id="trayToggle">▲</button>
+          </div>
+          <div class="tray-items" id="trayItems"></div>
+        </div>
+
+        <!-- Calendar View -->
+        <div class="calendar-wrapper" id="calendarWrapper">
+          <!-- Rendered by JS -->
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ── MODALS ── -->
+
+  <!-- Add/Edit Todo Modal -->
+  <div class="modal-overlay" id="modalTodo">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTodoTitle">Neue Aufgabe</h2>
+        <button class="modal-close" data-modal="modalTodo">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Titel *</label>
+          <input type="text" id="todoTitle" placeholder="Was muss erledigt werden?" />
+        </div>
+        <div class="form-group">
+          <label>Beschreibung</label>
+          <textarea id="todoDesc" placeholder="Details zur Aufgabe..." rows="3"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Priorität (1–5)</label>
+            <div class="priority-picker" id="priorityPicker">
+              <button class="prio-btn" data-val="1">1</button>
+              <button class="prio-btn" data-val="2">2</button>
+              <button class="prio-btn active" data-val="3">3</button>
+              <button class="prio-btn" data-val="4">4</button>
+              <button class="prio-btn" data-val="5">5</button>
+            </div>
+            <p class="form-hint" id="priorityHint">Mittel</p>
+          </div>
+          <div class="form-group">
+            <label>Dauer (Stunden)</label>
+            <input type="number" id="todoDuration" value="1" min="0.25" max="24" step="0.25" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Deadline</label>
+          <input type="date" id="todoDeadline" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" data-modal="modalTodo">Abbrechen</button>
+        <button class="btn-primary" id="btnSaveTodo">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Calendar Entry Modal -->
+  <div class="modal-overlay" id="modalCalEntry">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="calEntryTitle">Aufgabe einplanen</h2>
+        <button class="modal-close" data-modal="modalCalEntry">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-todo-name" id="calEntryTodoName"></p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Datum</label>
+            <input type="date" id="calEntryDate" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Von</label>
+            <input type="time" id="calEntryStart" />
+          </div>
+          <div class="form-group">
+            <label>Bis</label>
+            <input type="time" id="calEntryEnd" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" data-modal="modalCalEntry">Abbrechen</button>
+        <button class="btn-primary" id="btnSaveCalEntry">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conflict Modal -->
+  <div class="modal-overlay" id="modalConflict">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Konflikt erkannt</h2>
+        <button class="modal-close" data-modal="modalConflict">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="conflictMsg">Diese Aufgabe ist für diesen Tag bereits eingeplant. Was möchtest du tun?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" data-modal="modalConflict">Abbrechen</button>
+        <button class="btn-danger" id="btnConflictOverwrite">Überschreiben</button>
+        <button class="btn-primary" id="btnConflictKeep">Zusätzlich anlegen (anderes Datum)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirm -->
+  <div class="modal-overlay" id="modalDelete">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Aufgabe löschen?</h2>
+        <button class="modal-close" data-modal="modalDelete">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Diese Aufgabe und alle Kalendereinträge werden dauerhaft gelöscht.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" data-modal="modalDelete">Abbrechen</button>
+        <button class="btn-danger" id="btnConfirmDelete">Löschen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
