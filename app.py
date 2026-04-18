@@ -2,6 +2,8 @@ from flask import Flask, jsonify, request, render_template
 import sqlite3
 import os
 from datetime import datetime, date
+import secrets
+import hashlib
 
 app = Flask(__name__)
 
@@ -36,6 +38,23 @@ def init_db():
             start_time TEXT NOT NULL,
             end_time TEXT NOT NULL,
             FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS share_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            can_edit INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
         )
     ''')
     conn.commit()
@@ -225,7 +244,110 @@ def force_create_calendar_entry():
 def index():
     return render_template('index.html')
 
+# ── SHARING ────────────────────────────────────────────────────────────────────
+
+@app.route('/api/share/create', methods=['POST'])
+def create_share_link():
+    token = secrets.token_urlsafe(24)
+    conn = get_db()
+    conn.execute('INSERT INTO share_links (token, can_edit) VALUES (?, 1)', (token,))
+    conn.commit()
+    conn.close()
+    return jsonify({'token': token, 'url': f'/shared/{token}'})
+
+@app.route('/api/share/links', methods=['GET'])
+def get_share_links():
+    conn = get_db()
+    links = conn.execute('SELECT * FROM share_links ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return jsonify([dict(l) for l in links])
+
+@app.route('/api/share/links/<int:link_id>', methods=['DELETE'])
+def delete_share_link(link_id):
+    conn = get_db()
+    conn.execute('DELETE FROM share_links WHERE id = ?', (link_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/shared/<token>')
+def shared_view(token):
+    conn = get_db()
+    link = conn.execute('SELECT * FROM share_links WHERE token = ?', (token,)).fetchone()
+    conn.close()
+    if not link:
+        return 'Link ungültig oder abgelaufen.', 404
+    return render_template('index.html', share_token=token, can_edit=link['can_edit'])
+
+# ── SETTINGS (Logo) ────────────────────────────────────────────────────────────
+
+@app.route('/api/settings/logo', methods=['POST'])
+def upload_logo():
+    if 'logo' not in request.files:
+        return jsonify({'error': 'Keine Datei'}), 400
+    file = request.files['logo']
+    ext = file.filename.rsplit('.', 1)[-1].lower()
+    if ext not in ['png', 'jpg', 'jpeg', 'svg', 'webp']:
+        return jsonify({'error': 'Format nicht erlaubt'}), 400
+    filename = f'logo.{ext}'
+    path = os.path.join(os.path.dirname(__file__), 'static', filename)
+    file.save(path)
+    conn = get_db()
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('logo', ?)", (filename,))
+    conn.commit()
+    conn.close()
+    return jsonify({'logo': f'/static/{filename}'})
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    conn = get_db()
+    rows = conn.execute('SELECT * FROM settings').fetchall()
+    conn.close()
+    return jsonify({r['key']: r['value'] for r in rows})
+
+# ── ICS EXPORT ─────────────────────────────────────────────────────────────────
+
+@app.route('/api/calendar/export.ics')
+def export_ics():
+    conn = get_db()
+    entries = conn.execute('''
+        SELECT ce.*, t.title, t.description
+        FROM calendar_entries ce JOIN todos t ON ce.todo_id = t.id
+        ORDER BY ce.entry_date, ce.start_time
+    ''').fetchall()
+    conn.close()
+
+    lines = [
+        'BEGIN:VCALENDAR', 'VERSION:2.0',
+        'PRODID:-//Planer App//DE',
+        'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'
+    ]
+    for e in entries:
+        dt_start = e['entry_date'].replace('-','') + 'T' + e['start_time'].replace(':','') + '00'
+        dt_end   = e['entry_date'].replace('-','') + 'T' + e['end_time'].replace(':','') + '00'
+        uid = hashlib.md5(f"{e['id']}{e['entry_date']}".encode()).hexdigest()
+        lines += [
+            'BEGIN:VEVENT',
+            f"UID:{uid}@planerapp",
+            f"DTSTART:{dt_start}",
+            f"DTEND:{dt_end}",
+            f"SUMMARY:{e['title']}",
+            f"DESCRIPTION:{e['description'] or ''}",
+            'END:VEVENT'
+        ]
+    lines.append('END:VCALENDAR')
+
+    from flask import Response
+    return Response('\r\n'.join(lines), mimetype='text/calendar',
+                    headers={'Content-Disposition': 'attachment; filename=planer.ics'})
+
+@app.route('/')
+def index():
+    return render_template('index.html', share_token=None, can_edit=1)
+
 if __name__ == '__main__':
     init_db()
-    print("🚀 Todo & Kalender App läuft auf http://localhost:5000")
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    print(f"🚀 Planer App läuft auf http://localhost:{port}")
+    app.run(host='0.0.0.0', port=port, debug=debug)

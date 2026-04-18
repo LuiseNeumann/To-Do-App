@@ -13,6 +13,8 @@ let editingTodoId = null;
 let pendingCalEntry = null;   // { todo_id, entry_date, start_time, end_time }
 let deletingTodoId = null;
 let dragTodoId = null;
+let eisenAssignments = JSON.parse(localStorage.getItem('eisenAssignments') || '{}');
+// { todoId: 'do' | 'schedule' | 'delegate' | 'eliminate' }
 let dragGhost = null;
 let currentFilter = 'all';
 
@@ -338,16 +340,64 @@ function renderWeekView() {
       slot.classList.remove('drag-over');
       handleDrop(slot.dataset.date, slot.dataset.hour, null);
     });
-    slot.addEventListener('click', () => {
-      // Click slot: open calendar entry modal with this date/time pre-filled
-      const todo = todos.find(t => !t.completed);
-      if (!todo) return;
-      openCalEntryModalWithDate(null, slot.dataset.date, slot.dataset.hour);
+    slot.addEventListener('click', (e) => {
+      if (e.target.closest('.cal-entry')) return; // Klick auf Chip ignorieren
+      const incomplete = todos.filter(t => !t.completed);
+      if (!incomplete.length) { toast('Keine offenen Aufgaben vorhanden', 'info'); return; }
+      // Zeige Auswahl-Popup
+      showSlotPicker(slot.dataset.date, slot.dataset.hour, e.clientX, e.clientY);
+    });
+  })
+  // Render entries
+  placeWeekEntries(days);
+}
+
+function showSlotPicker(isoDate, hour, x, y) {
+  // Altes Popup entfernen
+  document.getElementById('slotPicker')?.remove();
+
+  const incomplete = todos.filter(t => !t.completed);
+  const popup = document.createElement('div');
+  popup.id = 'slotPicker';
+  popup.className = 'slot-picker';
+  popup.style.cssText = `left:${Math.min(x, window.innerWidth - 240)}px;top:${Math.min(y, window.innerHeight - 300)}px;`;
+
+  popup.innerHTML = `
+    <div class="slot-picker-header">
+      <span>Aufgabe wählen</span>
+      <button onclick="document.getElementById('slotPicker').remove()">✕</button>
+    </div>
+    <div class="slot-picker-list">
+      ${incomplete.map(t => `
+        <div class="slot-picker-item" data-id="${t.id}">
+          <span class="prio-dot prio-dot-${t.priority}"></span>
+          <span>${escHtml(t.title)}</span>
+        </div>
+      `).join('')}
+    </div>
+    <div style="padding:8px 12px;border-top:1px solid var(--border);">
+      <button class="btn-primary" style="width:100%;font-size:0.78rem;" id="slotPickerCustom">+ Neue Aufgabe + Termin</button>
+    </div>
+  `;
+
+  popup.querySelectorAll('.slot-picker-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const todo = todos.find(t => t.id === parseInt(item.dataset.id));
+      popup.remove();
+      calEntryTodoContext = todo;
+      openCalEntryModalWithDate(todo, isoDate, hour);
     });
   });
 
-  // Render entries
-  placeWeekEntries(days);
+  popup.querySelector('#slotPickerCustom').addEventListener('click', () => {
+    popup.remove();
+    openAddTodo();
+  });
+
+  document.body.appendChild(popup);
+  setTimeout(() => document.addEventListener('click', function handler(e) {
+    if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener('click', handler); }
+  }), 50);
 }
 
 function placeWeekEntries(days) {
@@ -660,6 +710,9 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     if (btn.dataset.tab === 'calendar') {
       renderCalendar();
     }
+    if (btn.dataset.tab === 'eisenhower') {
+      renderEisenhower();
+    }
   });
 });
 
@@ -736,4 +789,161 @@ document.querySelector('.tray-header').addEventListener('click', e => {
 (async function init() {
   await fetchTodos();
   await fetchCalendarForCurrentView();
+  // Logo laden
+  const settings = await (await fetch('/api/settings')).json();
+  if (settings.logo) {
+    const img = document.getElementById('logoImg');
+    const icon = document.getElementById('logoIcon');
+    img.src = '/static/' + settings.logo;
+    img.style.display = 'block';
+    icon.style.display = 'none';
+  }
+
+  // Share-Modus: wenn per Link geöffnet, Edit-Rechte prüfen
+  if (window.SHARE_TOKEN && !window.CAN_EDIT) {
+    document.querySelectorAll('.btn-primary, .action-btn.del, .action-btn.edit').forEach(el => {
+      el.style.display = 'none';
+    });
+  }
 })();
+
+document.getElementById('logoUpload').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('logo', file);
+  const r = await fetch('/api/settings/logo', { method: 'POST', body: fd });
+  const data = await r.json();
+  if (data.logo) {
+    const img = document.getElementById('logoImg');
+    const icon = document.getElementById('logoIcon');
+    img.src = data.logo + '?t=' + Date.now();
+    img.style.display = 'block';
+    icon.style.display = 'none';
+    toast('Logo aktualisiert', 'success');
+  }
+});
+
+document.getElementById('btnShare').addEventListener('click', async () => {
+  await renderShareLinks();
+  const baseUrl = window.location.origin;
+  document.getElementById('icsUrl').innerHTML =
+    `<code style="word-break:break-all;font-size:0.78rem;">${baseUrl}/api/calendar/export.ics</code>`;
+  openModal('modalShare');
+});
+
+async function renderShareLinks() {
+  const links = await (await fetch('/api/share/links')).json();
+  const base = window.location.origin;
+  const container = document.getElementById('shareLinks');
+  if (!links.length) {
+    container.innerHTML = '<p style="font-size:0.82rem;color:var(--text-light);">Noch keine Links erstellt.</p>';
+    return;
+  }
+  container.innerHTML = links.map(l => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <input readonly value="${base}/shared/${l.token}"
+        style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:0.78rem;background:var(--surface);"
+        onclick="this.select();document.execCommand('copy');window.showToast('Link kopiert!','success')">
+      <button onclick="deleteShareLink(${l.id})" class="btn-danger" style="padding:6px 10px;">✕</button>
+    </div>
+  `).join('');
+}
+
+window.showToast = toast; // expose for inline handlers
+
+document.getElementById('btnCreateShareLink').addEventListener('click', async () => {
+  await fetch('/api/share/create', { method: 'POST' });
+  await renderShareLinks();
+  toast('Link erstellt', 'success');
+});
+
+async function deleteShareLink(id) {
+  await fetch(`/api/share/links/${id}`, { method: 'DELETE' });
+  await renderShareLinks();
+}
+
+// ── EISENHOWER ────────────────────────────────────────────
+
+function saveEisen() {
+  localStorage.setItem('eisenAssignments', JSON.stringify(eisenAssignments));
+}
+
+function renderEisenhower() {
+  const incomplete = todos.filter(t => !t.completed);
+
+  // Tray: unassigned todos
+  const eisenTrayItems = document.getElementById('eisenTrayItems');
+  const unassigned = incomplete.filter(t => !eisenAssignments[t.id]);
+  eisenTrayItems.innerHTML = '';
+  if (!unassigned.length) {
+    eisenTrayItems.innerHTML = '<span style="color:var(--text-light);font-size:0.8rem;">Alle Aufgaben zugeordnet ✓</span>';
+  } else {
+    unassigned.forEach(todo => {
+      const item = document.createElement('div');
+      item.className = 'tray-item';
+      item.draggable = true;
+      item.dataset.todoId = todo.id;
+      item.innerHTML = `
+        <span class="prio-dot prio-dot-${todo.priority}"></span>
+        <span>${escHtml(todo.title)}</span>
+        <span style="color:var(--text-light);font-size:0.75rem;">${formatDuration(todo.duration_hours)}</span>
+      `;
+      item.addEventListener('dragstart', onEisenDragStart);
+      item.addEventListener('dragend', onDragEnd);
+      eisenTrayItems.appendChild(item);
+    });
+  }
+
+  // Quadrants
+  const quadrants = ['do', 'schedule', 'delegate', 'eliminate'];
+  quadrants.forEach(q => {
+    const zone = document.querySelector(`.eisen-drop-zone[data-q="${q}"]`);
+    zone.innerHTML = '';
+    const assigned = incomplete.filter(t => eisenAssignments[t.id] === q);
+    assigned.forEach(todo => {
+      const chip = document.createElement('div');
+      chip.className = `eisen-chip prio-${todo.priority}`;
+      chip.draggable = true;
+      chip.dataset.todoId = todo.id;
+      chip.innerHTML = `
+        <span class="prio-dot prio-dot-${todo.priority}"></span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(todo.title)}</span>
+        <button class="eisen-remove" title="Zurück in Tray">↩</button>
+      `;
+      chip.querySelector('.eisen-remove').addEventListener('click', e => {
+        e.stopPropagation();
+        delete eisenAssignments[todo.id];
+        saveEisen();
+        renderEisenhower();
+      });
+      chip.addEventListener('dragstart', onEisenDragStart);
+      chip.addEventListener('dragend', onDragEnd);
+      zone.appendChild(chip);
+    });
+
+    // Drop zone events
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      if (dragTodoId) {
+        eisenAssignments[dragTodoId] = q;
+        saveEisen();
+        renderEisenhower();
+      }
+    });
+  });
+}
+
+function onEisenDragStart(e) {
+  dragTodoId = parseInt(e.currentTarget.dataset.todoId);
+  e.dataTransfer.effectAllowed = 'move';
+  const todo = todos.find(t => t.id === dragTodoId);
+  dragGhost = document.createElement('div');
+  dragGhost.className = 'drag-ghost';
+  dragGhost.textContent = todo ? todo.title : 'Aufgabe';
+  document.body.appendChild(dragGhost);
+  e.dataTransfer.setDragImage(dragGhost, 20, 10);
+}

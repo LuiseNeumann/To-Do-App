@@ -7,14 +7,35 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css"/>
+  <!-- PWA -->
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#a2d2ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+
+  <!-- Share context für JS -->
+  <script>
+    window.SHARE_TOKEN = "{{ share_token or '' }}";
+    window.CAN_EDIT = {{ can_edit | int }};
+  </script>
 </head>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js');
+  }
+</script>
 <body>
   <div class="app-shell">
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="sidebar-logo">
-        <span class="logo-icon">✦</span>
-        <span class="logo-text">Planer</span>
+      <div class="sidebar-logo" id="logoArea">
+        <label for="logoUpload" title="Logo ändern" style="cursor:pointer;display:flex;align-items:center;gap:10px;">
+          <img id="logoImg" src="" alt="" style="height:32px;width:32px;object-fit:contain;border-radius:6px;display:none;">
+          <span class="logo-icon" id="logoIcon">✦</span>
+          <span class="logo-text">Planer</span>
+        </label>
+        <input type="file" id="logoUpload" accept=".png,.jpg,.jpeg,.svg,.webp" style="display:none;">
       </div>
       <nav class="sidebar-nav">
         <button class="nav-btn active" data-tab="todos">
@@ -24,6 +45,10 @@
         <button class="nav-btn" data-tab="calendar">
           <span class="nav-icon">◉</span>
           <span>Kalender</span>
+        </button>
+        <button class="nav-btn" data-tab="eisenhower">
+          <span class="nav-icon">⊞</span>
+          <span>Eisenhower</span>
         </button>
       </nav>
       <div class="sidebar-stats" id="sidebarStats">
@@ -39,6 +64,9 @@
           <span class="stat-num" id="statUrgent">0</span>
           <span class="stat-label">Dringend</span>
         </div>
+      </div>
+      <div class="share-section">
+        <button class="btn-share" id="btnShare">⇗ Link teilen</button>
       </div>
     </aside>
 
@@ -92,6 +120,72 @@
             </div>
           </div>
         </div>
+
+        <!-- ── EISENHOWER TAB ── -->
+      <section id="tab-eisenhower" class="tab-content">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Eisenhower Matrix</h1>
+            <p class="page-subtitle">Todos nach Wichtigkeit & Dringlichkeit einordnen</p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span style="font-size:0.8rem;color:var(--text-light);">Aufgaben in die Quadranten ziehen</span>
+          </div>
+        </div>
+
+        <!-- Unassigned Tray -->
+        <div class="todo-tray" id="eisenTray">
+          <div class="tray-header">
+            <span>Nicht zugeordnete Aufgaben</span>
+            <button class="tray-toggle" id="eisenTrayToggle">▲</button>
+          </div>
+          <div class="tray-items" id="eisenTrayItems"></div>
+        </div>
+
+        <!-- 2x2 Grid -->
+        <div class="eisen-grid" id="eisenGrid">
+          <div class="eisen-quadrant" id="eq-do" data-q="do">
+            <div class="eisen-label">
+              <span class="eisen-icon">🔥</span>
+              <div>
+                <strong>Sofort erledigen</strong>
+                <small>Wichtig &amp; Dringend</small>
+              </div>
+            </div>
+            <div class="eisen-drop-zone" data-q="do"></div>
+          </div>
+          <div class="eisen-quadrant" id="eq-schedule" data-q="schedule">
+            <div class="eisen-label">
+              <span class="eisen-icon">📅</span>
+              <div>
+                <strong>Einplanen</strong>
+                <small>Wichtig &amp; Nicht dringend</small>
+              </div>
+            </div>
+            <div class="eisen-drop-zone" data-q="schedule"></div>
+          </div>
+          <div class="eisen-quadrant" id="eq-delegate" data-q="delegate">
+            <div class="eisen-label">
+              <span class="eisen-icon">👥</span>
+              <div>
+                <strong>Delegieren</strong>
+                <small>Unwichtig &amp; Dringend</small>
+              </div>
+            </div>
+            <div class="eisen-drop-zone" data-q="delegate"></div>
+          </div>
+          <div class="eisen-quadrant" id="eq-eliminate" data-q="eliminate">
+            <div class="eisen-label">
+              <span class="eisen-icon">🗑</span>
+              <div>
+                <strong>Eliminieren</strong>
+                <small>Unwichtig &amp; Nicht dringend</small>
+              </div>
+            </div>
+            <div class="eisen-drop-zone" data-q="eliminate"></div>
+          </div>
+        </div>
+      </section>
 
         <!-- Todo Tray for Dragging -->
         <div class="todo-tray" id="todoTray">
@@ -227,6 +321,32 @@
 
   <!-- Toast Notifications -->
   <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Share Modal -->
+  <div class="modal-overlay" id="modalShare">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Kalender teilen</h2>
+        <button class="modal-close" data-modal="modalShare">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.88rem;color:var(--text-mid);margin-bottom:16px;">
+          Erstelle einen Link – wer ihn hat, kann deinen Kalender sehen und Einträge hinzufügen.
+        </p>
+        <div id="shareLinks"></div>
+        <button class="btn-primary" id="btnCreateShareLink" style="width:100%;margin-top:12px;">+ Neuen Link erstellen</button>
+        <hr style="margin:20px 0;border-color:var(--border);">
+        <p style="font-size:0.82rem;color:var(--text-light);">
+          📱 <strong>Kalender-Sync (ICS):</strong><br>
+          Abonniere diesen Link in Apple/Google Kalender:
+        </p>
+        <div class="share-url-box" id="icsUrl" style="margin-top:8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" data-modal="modalShare">Schließen</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/js/app.js"></script>
 </body>
