@@ -240,9 +240,6 @@ def force_create_calendar_entry():
     conn.close()
     return jsonify(dict(entry)), 201
 
-@app.route('/')
-def index():
-    return render_template('index.html')
 
 # ── SHARING ────────────────────────────────────────────────────────────────────
 
