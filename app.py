@@ -40,8 +40,6 @@ def init_db():
             FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
         )
     ''')
-    conn.commit()
-    conn.close()
     c.execute('''
         CREATE TABLE IF NOT EXISTS share_links (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,7 +48,6 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )
     ''')
-
     c.execute('''
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
