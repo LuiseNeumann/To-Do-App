@@ -313,10 +313,6 @@ def force_create_calendar_entry():
     d['title'] = d.pop('display_title')
     return jsonify(d), 201
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 # ── SHARING ────────────────────────────────────────────────────────────────────
 
 @app.route('/api/share/create', methods=['POST'])
