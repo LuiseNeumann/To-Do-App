@@ -46,6 +46,10 @@
           <span class="nav-icon">◉</span>
           <span>Kalender</span>
         </button>
+        <button class="nav-btn" data-tab="partner">
+          <span class="nav-icon">♡</span>
+          <span>Partner</span>
+        </button>
         <button class="nav-btn" data-tab="eisenhower">
           <span class="nav-icon">⊞</span>
           <span>Eisenhower</span>
@@ -120,6 +124,33 @@
             </div>
           </div>
         </div>
+
+        <!-- ── PARTNER TAB ── -->
+      <section id="tab-partner" class="tab-content">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Partner Kalender</h1>
+            <p class="page-subtitle" id="partnerSubtitle">Gemeinsame Planung</p>
+          </div>
+          <div class="calendar-controls">
+            <button class="btn-ghost" id="btnPartnerPrev">‹</button>
+            <button class="btn-ghost btn-today" id="btnPartnerToday">Heute</button>
+            <button class="btn-ghost" id="btnPartnerNext">›</button>
+            <div class="view-toggle">
+              <button class="view-btn active" data-partner-view="week">Woche</button>
+              <button class="view-btn" data-partner-view="month">Monat</button>
+            </div>
+          </div>
+        </div>
+        <div class="todo-tray" id="partnerTodoTray">
+          <div class="tray-header">
+            <span>Aufgaben in Partner-Kalender ziehen</span>
+            <button class="tray-toggle" id="partnerTrayToggle">▲</button>
+          </div>
+          <div class="tray-items" id="partnerTrayItems"></div>
+        </div>
+        <div class="calendar-wrapper" id="partnerCalWrapper"></div>
+      </section>
 
         <!-- ── EISENHOWER TAB ── -->
       <section id="tab-eisenhower" class="tab-content">
@@ -275,6 +306,18 @@
             <label>Bis</label>
             <input type="time" id="calEntryEnd" />
           </div>
+          <div class="form-group">
+          <label>Wiederholung</label>
+          <div class="recurrence-picker" id="recurrencePicker">
+            <button class="rec-btn active" data-val="once">Einmalig</button>
+            <button class="rec-btn" data-val="weekly">Wöchentlich</button>
+            <button class="rec-btn" data-val="yearly">Jährlich</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Titel (falls kein Todo verknüpft)</label>
+          <input type="text" id="calEntryCustomTitle" placeholder="z.B. Zahnarzt, Sport..."/>
+        </div>
         </div>
       </div>
       <div class="modal-footer">

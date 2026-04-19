@@ -1,7 +1,5 @@
-im kalender mit klick was hinzufügen
-logo
-app herunterladen 
-synchronisieren mit handy 
-auslagern, sodass es auch funktioniert, wenn ich den PC herunterfahre 
-Mit Mail Adresse verbinden, sodass ich den Kalender mit meinem Boyfriend teilen kann und er meinen sieht 
-eisenhower Matrix
+eisenhower funktioniert nicht 
+handy optimiert 
+nicht scrollbar auf Handy
+konrad eigenen Kalender, ich auch eigenen Kalender - momentan greifen wir beide auf einen Kalender zu 
+Termine müssen wiederkehren können also, dass ich noch einwählen muss ob der Termin wöchentlich, einmalig oder jährlich wiederholt werden soll

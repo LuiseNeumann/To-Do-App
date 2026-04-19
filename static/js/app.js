@@ -15,8 +15,13 @@ let deletingTodoId = null;
 let dragTodoId = null;
 let eisenAssignments = JSON.parse(localStorage.getItem('eisenAssignments') || '{}');
 // { todoId: 'do' | 'schedule' | 'delegate' | 'eliminate' }
+let partnerEntries = [];
 let dragGhost = null;
 let currentFilter = 'all';
+let currentProfile = 'me';         // 'me' oder 'partner'
+let partnerView = 'week';
+let partnerDate = new Date();
+let selectedRecurrence = 'once';
 
 // ── DOM Refs ────────────────────────────────────────────
 const todoList     = document.getElementById('todoList');
@@ -59,13 +64,18 @@ async function fetchTodos() {
   updateStats();
 }
 
-async function fetchCalendar(start, end) {
-  const url = start && end
-    ? `${API}/api/calendar?start=${start}&end=${end}`
-    : `${API}/api/calendar`;
+async function fetchCalendar(start, end, profile = 'me') {
+  const url = `${API}/api/calendar?profile=${profile}` +
+              (start && end ? `&start=${start}&end=${end}` : '');
   const r = await fetch(url);
-  calendarEntries = await r.json();
-  renderCalendar();
+  const entries = await r.json();
+  if (profile === 'me') {
+    calendarEntries = entries;
+    renderCalendar();
+  } else {
+    partnerEntries = entries;
+    renderPartnerCalendar();
+  }
 }
 
 async function createTodo(data) {
@@ -110,14 +120,18 @@ async function createCalEntry(data) {
     body: JSON.stringify(data)
   });
   if (r.status === 409) {
-    // Conflict – ask user
     pendingCalEntry = data;
     openModal('modalConflict');
     return false;
   }
   const entry = await r.json();
-  calendarEntries.push(entry);
-  renderCalendar();
+  if (data.profile === 'partner') {
+    partnerEntries.push(entry);
+    renderPartnerCalendar();
+  } else {
+    calendarEntries.push(entry);
+    renderCalendar();
+  }
   toast('Aufgabe eingeplant', 'success');
   return true;
 }
@@ -296,61 +310,6 @@ function updateCalendarSubtitle() {
 const HOURS = Array.from({length: 24}, (_, i) => i); // 0–23
 const DAY_NAMES = ['Mo','Di','Mi','Do','Fr','Sa','So'];
 
-function renderWeekView() {
-  const { start } = getWeekRange(currentDate);
-  const days = Array.from({length:7}, (_,i) => {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    return d;
-  });
-
-  const todayStr = dateToISO(new Date());
-
-  let html = '<div class="week-grid">';
-
-  // Header row
-  html += `<div class="week-time-col" style="border-bottom:1.5px solid var(--border);background:var(--surface);"></div>`;
-  days.forEach((d, i) => {
-    const iso = dateToISO(d);
-    const isToday = iso === todayStr;
-    html += `<div class="week-day-header${isToday?' today':''}">
-      <div class="week-day-name">${DAY_NAMES[i]}</div>
-      <div class="week-day-num">${d.getDate()}</div>
-    </div>`;
-  });
-
-  // Body rows: each hour
-  HOURS.forEach(hour => {
-    html += `<div class="time-label" style="border-right:1.5px solid var(--border)">${String(hour).padStart(2,'0')}:00</div>`;
-    days.forEach(day => {
-      const iso = dateToISO(day);
-      html += `<div class="week-slot" data-date="${iso}" data-hour="${hour}"></div>`;
-    });
-  });
-
-  html += '</div>';
-  calWrap.innerHTML = html;
-
-  // Attach drag events to slots
-  calWrap.querySelectorAll('.week-slot').forEach(slot => {
-    slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('drag-over'); });
-    slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
-    slot.addEventListener('drop', e => {
-      e.preventDefault();
-      slot.classList.remove('drag-over');
-      handleDrop(slot.dataset.date, slot.dataset.hour, null);
-    });
-    slot.addEventListener('click', (e) => {
-      if (e.target.closest('.cal-entry')) return; // Klick auf Chip ignorieren
-      const incomplete = todos.filter(t => !t.completed);
-      if (!incomplete.length) { toast('Keine offenen Aufgaben vorhanden', 'info'); return; }
-      // Zeige Auswahl-Popup
-      showSlotPicker(slot.dataset.date, slot.dataset.hour, e.clientX, e.clientY);
-    });
-  })
-  // Render entries
-  placeWeekEntries(days);
-}
 
 function showSlotPicker(isoDate, hour, x, y) {
   // Altes Popup entfernen
@@ -400,47 +359,73 @@ function showSlotPicker(isoDate, hour, x, y) {
   }), 50);
 }
 
-function placeWeekEntries(days) {
-  days.forEach(day => {
-    const iso = dateToISO(day);
-    const dayEntries = calendarEntries.filter(e => e.entry_date === iso);
-    dayEntries.forEach(entry => {
-      const [sh, sm] = entry.start_time.split(':').map(Number);
-      const [eh, em] = entry.end_time.split(':').map(Number);
-      const startSlot = calWrap.querySelector(`.week-slot[data-date="${iso}"][data-hour="${sh}"]`);
-      if (!startSlot) return;
 
-      const totalMins = (eh * 60 + em) - (sh * 60 + sm);
-      const slotH = 52; // px per hour
-      const height = Math.max(20, (totalMins / 60) * slotH);
-      const topOffset = (sm / 60) * slotH;
 
-      const chip = document.createElement('div');
-      chip.className = `cal-entry cal-prio-${entry.priority}`;
-      chip.style.cssText = `top:${topOffset}px;height:${height}px;`;
-      chip.innerHTML = `
-        <span style="overflow:hidden;text-overflow:ellipsis;">${escHtml(entry.title)}<br><small>${entry.start_time}–${entry.end_time}</small></span>
-        <span class="entry-del" title="Entfernen">✕</span>
-      `;
-      chip.querySelector('.entry-del').addEventListener('click', e => {
-        e.stopPropagation();
-        deleteCalEntry(entry.id);
-      });
-      startSlot.style.position = 'relative';
-      startSlot.appendChild(chip);
-    });
-  });
+function renderWeekView() {
+  renderWeekViewInto(calWrap, currentDate, calendarEntries, 'me');
 }
 
 function renderMonthView() {
-  const year  = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const first = new Date(year, month, 1);
-  const last  = new Date(year, month+1, 0);
+  renderMonthViewInto(calWrap, currentDate, calendarEntries, 'me');
+}
+
+function renderWeekViewInto(wrapper, refDate, entries, profile) {
+  const { start } = getWeekRange(refDate);
+  const days = Array.from({length:7}, (_,i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
   const todayStr = dateToISO(new Date());
 
-  // Start from Monday before first
-  let startDay = first.getDay(); // 0=Sun
+  let html = '<div class="week-grid">';
+  html += `<div class="week-time-col" style="border-bottom:1.5px solid var(--border);background:var(--surface);"></div>`;
+  days.forEach((d, i) => {
+    const iso = dateToISO(d);
+    const isToday = iso === todayStr;
+    html += `<div class="week-day-header${isToday?' today':''}">
+      <div class="week-day-name">${DAY_NAMES[i]}</div>
+      <div class="week-day-num">${d.getDate()}</div>
+    </div>`;
+  });
+  HOURS.forEach(hour => {
+    html += `<div class="time-label" style="border-right:1.5px solid var(--border)">${String(hour).padStart(2,'0')}:00</div>`;
+    days.forEach(day => {
+      const iso = dateToISO(day);
+      html += `<div class="week-slot" data-date="${iso}" data-hour="${hour}" data-profile="${profile}"></div>`;
+    });
+  });
+  html += '</div>';
+  wrapper.innerHTML = html;
+
+  wrapper.querySelectorAll('.week-slot').forEach(slot => {
+    slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('drag-over'); });
+    slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+    slot.addEventListener('drop', e => {
+      e.preventDefault();
+      slot.classList.remove('drag-over');
+      currentProfile = slot.dataset.profile;
+      handleDrop(slot.dataset.date, slot.dataset.hour, null);
+    });
+    slot.addEventListener('click', (e) => {
+      if (e.target.closest('.cal-entry')) return;
+      const incomplete = todos.filter(t => !t.completed);
+      if (!incomplete.length) { toast('Keine offenen Aufgaben vorhanden', 'info'); return; }
+      currentProfile = slot.dataset.profile;
+      showSlotPicker(slot.dataset.date, slot.dataset.hour, e.clientX, e.clientY);
+    });
+  });
+
+  placeWeekEntries(days, wrapper, entries, profile);
+}
+
+function renderMonthViewInto(wrapper, refDate, entries, profile) {
+  const year  = refDate.getFullYear();
+  const month = refDate.getMonth();
+  const first = new Date(year, month, 1);
+  const todayStr = dateToISO(new Date());
+
+  let startDay = first.getDay();
   startDay = startDay === 0 ? 6 : startDay - 1;
   const gridStart = new Date(first);
   gridStart.setDate(first.getDate() - startDay);
@@ -457,11 +442,10 @@ function renderMonthView() {
     const iso = dateToISO(d);
     const isCurrentMonth = d.getMonth() === month;
     const isToday = iso === todayStr;
-    const dayEntries = calendarEntries.filter(e => e.entry_date === iso);
+    const dayEntries = entries.filter(e => e.entry_date === iso);
 
-    html += `<div class="month-day${!isCurrentMonth?' other-month':''}${isToday?' today':''}" data-date="${iso}">
+    html += `<div class="month-day${!isCurrentMonth?' other-month':''}${isToday?' today':''}" data-date="${iso}" data-profile="${profile}">
       <div class="month-day-num">${d.getDate()}</div>`;
-
     dayEntries.slice(0,3).forEach(entry => {
       html += `<div class="month-entry cal-prio-${entry.priority}" data-entry-id="${entry.id}">
         <span style="overflow:hidden;text-overflow:ellipsis;">${escHtml(entry.title)}</span>
@@ -469,31 +453,62 @@ function renderMonthView() {
       </div>`;
     });
     if (dayEntries.length > 3) {
-      html += `<div style="font-size:0.7rem;color:var(--text-light);padding:0 2px;">+${dayEntries.length-3} mehr</div>`;
+      html += `<div style="font-size:0.7rem;color:var(--text-light);">+${dayEntries.length-3} mehr</div>`;
     }
-
     html += `</div>`;
   }
   html += '</div></div>';
-  calWrap.innerHTML = html;
+  wrapper.innerHTML = html;
 
-  // Drag events on month cells
-  calWrap.querySelectorAll('.month-day').forEach(cell => {
+  wrapper.querySelectorAll('.month-day').forEach(cell => {
     cell.addEventListener('dragover', e => { e.preventDefault(); cell.classList.add('drag-over'); });
     cell.addEventListener('dragleave', () => cell.classList.remove('drag-over'));
     cell.addEventListener('drop', e => {
       e.preventDefault();
       cell.classList.remove('drag-over');
+      currentProfile = cell.dataset.profile;
       handleDrop(cell.dataset.date, null, null);
     });
   });
-
-  // Delete buttons on entries
-  calWrap.querySelectorAll('.entry-del').forEach(btn => {
+  wrapper.querySelectorAll('.entry-del').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      const entryId = parseInt(btn.closest('[data-entry-id]').dataset.entryId);
-      deleteCalEntry(entryId);
+      const entryId = btn.closest('[data-entry-id]').dataset.entryId;
+      if (!String(entryId).startsWith('virtual_')) deleteCalEntry(parseInt(entryId));
+    });
+  });
+}
+
+function placeWeekEntries(days, wrapper = calWrap, entries = calendarEntries, profile = 'me') {
+  days.forEach(day => {
+    const iso = dateToISO(day);
+    const dayEntries = entries.filter(e => e.entry_date === iso);
+    dayEntries.forEach(entry => {
+      const [sh, sm] = entry.start_time.split(':').map(Number);
+      const [eh, em] = entry.end_time.split(':').map(Number);
+      const startSlot = wrapper.querySelector(`.week-slot[data-date="${iso}"][data-hour="${sh}"]`);
+      if (!startSlot) return;
+      const totalMins = (eh * 60 + em) - (sh * 60 + sm);
+      const slotH = 52;
+      const height = Math.max(20, (totalMins / 60) * slotH);
+      const topOffset = (sm / 60) * slotH;
+
+      const recIcon = entry.recurrence === 'weekly' ? ' 🔁' : entry.recurrence === 'yearly' ? ' 📅' : '';
+      const chip = document.createElement('div');
+      chip.className = `cal-entry cal-prio-${entry.priority}`;
+      chip.style.cssText = `top:${topOffset}px;height:${height}px;`;
+      chip.innerHTML = `
+        <span style="overflow:hidden;text-overflow:ellipsis;">${escHtml(entry.title)}${recIcon}<br>
+        <small>${entry.start_time}–${entry.end_time}</small></span>
+        <span class="entry-del" title="Entfernen">✕</span>
+      `;
+      chip.querySelector('.entry-del').addEventListener('click', e => {
+        e.stopPropagation();
+        if (!String(entry.id).startsWith('virtual_')) deleteCalEntry(entry.id);
+        else toast('Wiederkehrenden Termin beim Original löschen', 'info');
+      });
+      startSlot.style.position = 'relative';
+      startSlot.appendChild(chip);
     });
   });
 }
@@ -574,12 +589,18 @@ function openCalEntryModalWithDate(todo, isoDate, hourStr) {
 }
 
 document.getElementById('btnSaveCalEntry').addEventListener('click', async () => {
-  if (!calEntryTodoContext) return;
+  if (!calEntryTodoContext && !document.getElementById('calEntryCustomTitle').value.trim()) {
+    toast('Bitte Aufgabe wählen oder Titel eingeben', 'error');
+    return;
+  }
   const data = {
-    todo_id:    calEntryTodoContext.id,
+    todo_id:    calEntryTodoContext ? calEntryTodoContext.id : null,
     entry_date: document.getElementById('calEntryDate').value,
     start_time: document.getElementById('calEntryStart').value,
     end_time:   document.getElementById('calEntryEnd').value,
+    title:      document.getElementById('calEntryCustomTitle').value.trim(),
+    recurrence: selectedRecurrence,
+    profile:    currentProfile,
   };
   if (!data.entry_date || !data.start_time || !data.end_time) {
     toast('Bitte alle Felder ausfüllen', 'error');
@@ -646,6 +667,14 @@ document.querySelectorAll('.prio-btn').forEach(btn => {
   btn.addEventListener('click', () => setPriority(btn.dataset.val));
 });
 
+document.querySelectorAll('.rec-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.rec-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedRecurrence = btn.dataset.val;
+  });
+});
+
 document.getElementById('btnAddTodo').addEventListener('click', openAddTodo);
 
 document.getElementById('btnSaveTodo').addEventListener('click', async () => {
@@ -708,7 +737,12 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
     if (btn.dataset.tab === 'calendar') {
-      renderCalendar();
+      currentProfile = 'me';
+      fetchCalendarForCurrentView();
+    }
+    if (btn.dataset.tab === 'partner') {
+      currentProfile = 'partner';
+      fetchPartnerCalendarForCurrentView();
     }
     if (btn.dataset.tab === 'eisenhower') {
       renderEisenhower();
@@ -761,18 +795,58 @@ document.getElementById('btnToday').addEventListener('click', () => {
   fetchCalendarForCurrentView();
 });
 
+document.getElementById('btnPartnerPrev').addEventListener('click', () => {
+  if (partnerView === 'week') partnerDate.setDate(partnerDate.getDate() - 7);
+  else partnerDate.setMonth(partnerDate.getMonth() - 1);
+  fetchPartnerCalendarForCurrentView();
+});
+document.getElementById('btnPartnerNext').addEventListener('click', () => {
+  if (partnerView === 'week') partnerDate.setDate(partnerDate.getDate() + 7);
+  else partnerDate.setMonth(partnerDate.getMonth() + 1);
+  fetchPartnerCalendarForCurrentView();
+});
+document.getElementById('btnPartnerToday').addEventListener('click', () => {
+  partnerDate = new Date();
+  fetchPartnerCalendarForCurrentView();
+});
+document.querySelectorAll('[data-partner-view]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-partner-view]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    partnerView = btn.dataset.partnerView;
+    fetchPartnerCalendarForCurrentView();
+  });
+});
+
+// Partner Tray
+document.getElementById('partnerTrayToggle').addEventListener('click', () => {
+  document.getElementById('partnerTodoTray').classList.toggle('collapsed');
+});
+
 function fetchCalendarForCurrentView() {
   let start, end;
   if (currentView === 'week') {
     const { start: s, end: e } = getWeekRange(currentDate);
-    start = dateToISO(s);
-    end   = dateToISO(e);
+    start = dateToISO(s); end = dateToISO(e);
   } else {
     const y = currentDate.getFullYear(), m = currentDate.getMonth();
     start = dateToISO(new Date(y, m, 1));
     end   = dateToISO(new Date(y, m+1, 0));
   }
-  fetchCalendar(start, end);
+  fetchCalendar(start, end, 'me');
+}
+
+function fetchPartnerCalendarForCurrentView() {
+  let start, end;
+  if (partnerView === 'week') {
+    const { start: s, end: e } = getWeekRange(partnerDate);
+    start = dateToISO(s); end = dateToISO(e);
+  } else {
+    const y = partnerDate.getFullYear(), m = partnerDate.getMonth();
+    start = dateToISO(new Date(y, m, 1));
+    end   = dateToISO(new Date(y, m+1, 0));
+  }
+  fetchCalendar(start, end, 'partner');
 }
 
 // ── Tray Toggle ───────────────────────────────────────────
@@ -784,6 +858,52 @@ document.querySelector('.tray-header').addEventListener('click', e => {
     document.querySelector('.todo-tray').classList.toggle('collapsed');
   }
 });
+
+function renderPartnerCalendar() {
+  const wrapper = document.getElementById('partnerCalWrapper');
+  if (!wrapper) return;
+
+  // Tray befüllen
+  const tray = document.getElementById('partnerTrayItems');
+  tray.innerHTML = '';
+  todos.filter(t => !t.completed).forEach(todo => {
+    const item = document.createElement('div');
+    item.className = 'tray-item';
+    item.draggable = true;
+    item.dataset.todoId = todo.id;
+    item.innerHTML = `
+      <span class="prio-dot prio-dot-${todo.priority}"></span>
+      <span>${escHtml(todo.title)}</span>
+      <span style="color:var(--text-light);font-size:0.75rem;">${formatDuration(todo.duration_hours)}</span>
+    `;
+    item.addEventListener('dragstart', e => {
+      dragTodoId = parseInt(e.currentTarget.dataset.todoId);
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    item.addEventListener('dragend', onDragEnd);
+    tray.appendChild(item);
+  });
+
+  // Kalender rendern (gleiche Logik wie renderWeekView/renderMonthView
+  // aber mit partnerEntries und profile='partner')
+  const savedEntries = calendarEntries;
+  const savedProfile = currentProfile;
+  calendarEntries = partnerEntries;
+  currentProfile  = 'partner';
+  const savedWrap = calWrap;
+
+  // Temporär calWrap auf partnerCalWrapper umleiten
+  Object.defineProperty(window, '_partnerRender', { value: true, configurable: true });
+
+  if (partnerView === 'week') {
+    renderWeekViewInto(wrapper, partnerDate, partnerEntries, 'partner');
+  } else {
+    renderMonthViewInto(wrapper, partnerDate, partnerEntries, 'partner');
+  }
+
+  calendarEntries = savedEntries;
+  currentProfile  = savedProfile;
+}
 
 // ── Init ──────────────────────────────────────────────────
 (async function init() {
@@ -870,6 +990,8 @@ function saveEisen() {
 }
 
 function renderEisenhower() {
+  const tab = document.getElementById('tab-eisenhower');
+  if (!tab.classList.contains('active')) return; // Guard
   const incomplete = todos.filter(t => !t.completed);
 
   // Tray: unassigned todos
