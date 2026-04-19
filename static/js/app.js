@@ -538,7 +538,6 @@ function handleDrop(isoDate, hourStr, endHourStr) {
   const todo = todos.find(t => t.id === dragTodoId);
   if (!todo) return;
 
-  // If no time given (month view), open modal to pick time
   if (!hourStr) {
     openCalEntryModalWithDate(todo, isoDate, null);
     return;
@@ -550,13 +549,27 @@ function handleDrop(isoDate, hourStr, endHourStr) {
   const endMins = Math.round((todo.duration_hours % 1) * 60);
   const endTime = `${String(endH).padStart(2,'0')}:${String(endMins).padStart(2,'0')}`;
 
-  createCalEntry({ todo_id: todo.id, entry_date: isoDate, start_time: startTime, end_time: endTime });
+  createCalEntry({
+    todo_id: todo.id,
+    entry_date: isoDate,
+    start_time: startTime,
+    end_time: endTime,
+    title: todo.title,
+    recurrence: selectedRecurrence,
+    profile: currentProfile,
+  });
 }
 
 // ── Calendar Entry Modal ──────────────────────────────────
 let calEntryTodoContext = null;
 
 function openCalEntryModal(todo) {
+  // Recurrence zurücksetzen
+  selectedRecurrence = 'once';
+  document.querySelectorAll('.rec-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === 'once');
+  });
+
   calEntryTodoContext = todo;
   document.getElementById('calEntryTitle').textContent = 'Aufgabe einplanen';
   document.getElementById('calEntryTodoName').textContent = todo.title;
@@ -569,6 +582,12 @@ function openCalEntryModal(todo) {
 
 function openCalEntryModalWithDate(todo, isoDate, hourStr) {
   if (todo) {
+    // Recurrence zurücksetzen
+  selectedRecurrence = 'once';
+  document.querySelectorAll('.rec-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === 'once');
+  });
+
     calEntryTodoContext = todo;
     document.getElementById('calEntryTodoName').textContent = todo.title;
   }
@@ -607,7 +626,15 @@ document.getElementById('btnSaveCalEntry').addEventListener('click', async () =>
     return;
   }
   closeModal('modalCalEntry');
-  await createCalEntry(data);
+  const ok = await createCalEntry(data);
+  if (ok) {
+    // Neu laden damit wiederkehrende Einträge expandiert werden
+    if (currentProfile === 'partner') {
+      fetchPartnerCalendarForCurrentView();
+    } else {
+      fetchCalendarForCurrentView();
+    }
+  }
 });
 
 // ── Conflict Modal ────────────────────────────────────────
@@ -774,8 +801,10 @@ document.querySelectorAll('.view-btn').forEach(btn => {
 // ── Navigation ────────────────────────────────────────────
 document.getElementById('btnPrev').addEventListener('click', () => {
   if (currentView === 'week') {
+    currentDate = new Date(currentDate.getTime());
     currentDate.setDate(currentDate.getDate() - 7);
   } else {
+    currentDate = new Date(currentDate.getTime());
     currentDate.setMonth(currentDate.getMonth() - 1);
   }
   fetchCalendarForCurrentView();
@@ -783,8 +812,10 @@ document.getElementById('btnPrev').addEventListener('click', () => {
 
 document.getElementById('btnNext').addEventListener('click', () => {
   if (currentView === 'week') {
+    currentDate = new Date(currentDate.getTime());
     currentDate.setDate(currentDate.getDate() + 7);
   } else {
+    currentDate = new Date(currentDate.getTime());
     currentDate.setMonth(currentDate.getMonth() + 1);
   }
   fetchCalendarForCurrentView();
