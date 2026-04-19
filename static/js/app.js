@@ -990,11 +990,9 @@ function saveEisen() {
 }
 
 function renderEisenhower() {
-  const tab = document.getElementById('tab-eisenhower');
-  if (!tab.classList.contains('active')) return; // Guard
   const incomplete = todos.filter(t => !t.completed);
 
-  // Tray: unassigned todos
+  // Tray: nicht zugeordnete Todos
   const eisenTrayItems = document.getElementById('eisenTrayItems');
   const unassigned = incomplete.filter(t => !eisenAssignments[t.id]);
   eisenTrayItems.innerHTML = '';
@@ -1017,11 +1015,13 @@ function renderEisenhower() {
     });
   }
 
-  // Quadrants
+  // 2x2 Quadranten befüllen
   const quadrants = ['do', 'schedule', 'delegate', 'eliminate'];
   quadrants.forEach(q => {
     const zone = document.querySelector(`.eisen-drop-zone[data-q="${q}"]`);
+    if (!zone) return;
     zone.innerHTML = '';
+
     const assigned = incomplete.filter(t => eisenAssignments[t.id] === q);
     assigned.forEach(todo => {
       const chip = document.createElement('div');
@@ -1044,7 +1044,7 @@ function renderEisenhower() {
       zone.appendChild(chip);
     });
 
-    // Drop zone events
+    // Drop-Events neu setzen
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
     zone.addEventListener('drop', e => {
