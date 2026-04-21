@@ -564,19 +564,21 @@ function handleDrop(isoDate, hourStr, endHourStr) {
 let calEntryTodoContext = null;
 
 function openCalEntryModal(todo) {
+  calEntryTodoContext = todo;
+
   // Recurrence zurücksetzen
   selectedRecurrence = 'once';
   document.querySelectorAll('.rec-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.val === 'once');
   });
 
-  calEntryTodoContext = todo;
   document.getElementById('calEntryTitle').textContent = 'Aufgabe einplanen';
   document.getElementById('calEntryTodoName').textContent = todo.title;
   document.getElementById('calEntryDate').value = dateToISO(new Date());
   document.getElementById('calEntryStart').value = '08:00';
   const endH = Math.min(23, 8 + Math.ceil(todo.duration_hours));
   document.getElementById('calEntryEnd').value = `${String(endH).padStart(2,'0')}:00`;
+  document.getElementById('calEntryCustomTitle').value = '';
   openModal('modalCalEntry');
 }
 
@@ -608,27 +610,38 @@ function openCalEntryModalWithDate(todo, isoDate, hourStr) {
 }
 
 document.getElementById('btnSaveCalEntry').addEventListener('click', async () => {
-  if (!calEntryTodoContext && !document.getElementById('calEntryCustomTitle').value.trim()) {
+  const customTitle = document.getElementById('calEntryCustomTitle').value.trim();
+
+  if (!calEntryTodoContext && !customTitle) {
     toast('Bitte Aufgabe wählen oder Titel eingeben', 'error');
     return;
   }
+
+  const entryDate  = document.getElementById('calEntryDate').value;
+  const startTime  = document.getElementById('calEntryStart').value;
+  const endTime    = document.getElementById('calEntryEnd').value;
+
+  if (!entryDate || !startTime || !endTime) {
+    toast('Bitte Datum und Zeiten ausfüllen', 'error');
+    return;
+  }
+
   const data = {
     todo_id:    calEntryTodoContext ? calEntryTodoContext.id : null,
-    entry_date: document.getElementById('calEntryDate').value,
-    start_time: document.getElementById('calEntryStart').value,
-    end_time:   document.getElementById('calEntryEnd').value,
-    title:      document.getElementById('calEntryCustomTitle').value.trim(),
+    entry_date: entryDate,
+    start_time: startTime,
+    end_time:   endTime,
+    title:      customTitle || (calEntryTodoContext ? calEntryTodoContext.title : ''),
     recurrence: selectedRecurrence,
     profile:    currentProfile,
   };
-  if (!data.entry_date || !data.start_time || !data.end_time) {
-    toast('Bitte alle Felder ausfüllen', 'error');
-    return;
-  }
+
+  console.log('Speichere Kalendereintrag:', data); // Debug
+
   closeModal('modalCalEntry');
+
   const ok = await createCalEntry(data);
-  if (ok) {
-    // Neu laden damit wiederkehrende Einträge expandiert werden
+  if (ok !== false) {
     if (currentProfile === 'partner') {
       fetchPartnerCalendarForCurrentView();
     } else {
