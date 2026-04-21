@@ -665,6 +665,10 @@ function openAddTodo() {
   document.getElementById('todoDesc').value = '';
   document.getElementById('todoDuration').value = '1';
   document.getElementById('todoDeadline').value = '';
+  document.getElementById('todoCalDate').value = '';
+  document.getElementById('todoCalStart').value = '';
+  document.getElementById('todoCalEnd').value = '';
+
   setPriority(3);
   openModal('modalTodo');
   setTimeout(() => document.getElementById('todoTitle').focus(), 100);
@@ -678,6 +682,13 @@ function openEditTodo(todo) {
   document.getElementById('todoDuration').value = todo.duration_hours;
   document.getElementById('todoDeadline').value = todo.deadline || '';
   setPriority(todo.priority);
+
+  const existing = calendarEntries.find(e => e.todo_id === todo.id);
+  document.getElementById('todoCalDate').value  = existing ? existing.entry_date  : '';
+  document.getElementById('todoCalStart').value = existing ? existing.start_time  : '';
+  document.getElementById('todoCalEnd').value   = existing ? existing.end_time    : '';
+
+
   openModal('modalTodo');
   setTimeout(() => document.getElementById('todoTitle').focus(), 100);
 }
@@ -710,18 +721,57 @@ document.getElementById('btnSaveTodo').addEventListener('click', async () => {
 
   const data = {
     title,
-    description: document.getElementById('todoDesc').value.trim(),
-    priority: selectedPriority,
+    description:    document.getElementById('todoDesc').value.trim(),
+    priority:       selectedPriority,
     duration_hours: parseFloat(document.getElementById('todoDuration').value) || 1,
-    deadline: document.getElementById('todoDeadline').value || null,
+    deadline:       document.getElementById('todoDeadline').value || null,
   };
 
+  const calDate  = document.getElementById('todoCalDate').value;
+  const calStart = document.getElementById('todoCalStart').value;
+  const calEnd   = document.getElementById('todoCalEnd').value;
+
   closeModal('modalTodo');
+
+  let savedTodo;
   if (editingTodoId) {
     await updateTodo(editingTodoId, data);
+    savedTodo = todos.find(t => t.id === editingTodoId);
     toast('Aufgabe aktualisiert', 'success');
   } else {
-    await createTodo(data);
+    const r = await fetch(`${API}/api/todos`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    savedTodo = await r.json();
+    todos.unshift(savedTodo);
+    renderTodos();
+    renderTray();
+    updateStats();
+    toast('Aufgabe erstellt', 'success');
+  }
+
+  // Kalendereintrag anlegen wenn Datum + Zeit angegeben
+  if (calDate && calStart && calEnd && savedTodo) {
+    // Bestehenden Eintrag für dieses Todo an diesem Tag entfernen
+    const existingEntry = calendarEntries.find(
+      e => e.todo_id === savedTodo.id && e.entry_date === calDate
+    );
+    if (existingEntry) {
+      await fetch(`${API}/api/calendar/${existingEntry.id}`, { method: 'DELETE' });
+      calendarEntries = calendarEntries.filter(e => e.id !== existingEntry.id);
+    }
+
+    await createCalEntry({
+      todo_id:    savedTodo.id,
+      entry_date: calDate,
+      start_time: calStart,
+      end_time:   calEnd,
+      title:      savedTodo.title,
+      recurrence: 'once',
+      profile:    currentProfile,
+    });
+    fetchCalendarForCurrentView();
   }
 });
 
