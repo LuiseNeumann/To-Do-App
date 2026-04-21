@@ -1036,25 +1036,28 @@ textarea { resize: vertical; }
 /* ── Recurrence Picker ── */
 .recurrence-picker {
   display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 .rec-btn {
-  flex: 1;
-  padding: 8px;
+  width: 100%;
+  padding: 9px 14px;
   border: 1.5px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 500;
   color: var(--text-mid);
   cursor: pointer;
   transition: var(--transition);
+  text-align: left;
 }
-.rec-btn:hover { border-color: var(--blue-light); }
+.rec-btn:hover { border-color: var(--blue-light); background: var(--blue-pale); }
 .rec-btn.active {
   background: linear-gradient(135deg, var(--blue-light), var(--pink));
   border-color: transparent;
   color: #1e3a5f;
+  font-weight: 600;
 }
 
 /* ── Mobile Navigation (aufklappbar) ── */
