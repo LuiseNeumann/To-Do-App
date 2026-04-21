@@ -493,7 +493,7 @@ function placeWeekEntries(days, wrapper = calWrap, entries = calendarEntries, pr
       const height = Math.max(20, (totalMins / 60) * slotH);
       const topOffset = (sm / 60) * slotH;
 
-      const recIcon = entry.recurrence === 'weekly' ? ' 🔁' : entry.recurrence === 'yearly' ? ' 📅' : '';
+      const recIcon = entry.recurrence === 'daily' ? ' 🔄' : entry.recurrence === 'weekly' ? ' 🔁' : entry.recurrence === 'yearly' ? ' 📅' : '';
       const chip = document.createElement('div');
       chip.className = `cal-entry cal-prio-${entry.priority}`;
       chip.style.cssText = `top:${topOffset}px;height:${height}px;`;

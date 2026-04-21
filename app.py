@@ -170,6 +170,16 @@ def get_calendar():
                 copy['id'] = f"virtual_{d['id']}_{cur.isoformat()}"
                 result.append(copy)
                 cur += __import__('datetime').timedelta(weeks=1)
+        elif d['recurrence'] == 'daily' and start and end:
+            base  = date.fromisoformat(d['entry_date'])
+            end_d = date.fromisoformat(end)
+            cur   = base + __import__('datetime').timedelta(days=1)
+            while cur <= end_d:
+                copy = dict(d)
+                copy['entry_date'] = cur.isoformat()
+                copy['id'] = f"virtual_{d['id']}_{cur.isoformat()}"
+                result.append(copy)
+                cur += __import__('datetime').timedelta(days=1)
         elif d['recurrence'] == 'yearly' and start and end:
             base  = date.fromisoformat(d['entry_date'])
             end_d = date.fromisoformat(end)
