@@ -18,6 +18,11 @@ def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = get_db()
     c = conn.cursor()
+
+    # Check if calendar_entries table exists and has the new columns
+    c.execute("PRAGMA table_info(calendar_entries)")
+    existing_columns = [row['name'] for row in c.fetchall()]
+
     c.execute('''
         CREATE TABLE IF NOT EXISTS todos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,19 +35,18 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )
     ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS calendar_entries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            todo_id INTEGER,
-            entry_date TEXT NOT NULL,
-            start_time TEXT NOT NULL,
-            end_time TEXT NOT NULL,
-            title TEXT DEFAULT '',
-            recurrence TEXT DEFAULT 'once',
-            profile TEXT DEFAULT 'me',
-            FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
-        )
-    ''')
+
+    # Migrate potentially missing columns from older DB versions
+    expected_cols = ['title', 'recurrence', 'profile']
+    default_map = {
+        'title': "''",
+        'recurrence': "'once'",
+        'profile': "'me'",
+    }
+    for col in expected_cols:
+        if col not in existing_columns:
+            c.execute(f"ALTER TABLE calendar_entries ADD COLUMN {col} TEXT DEFAULT {default_map[col]}")
+
     c.execute('''
         CREATE TABLE IF NOT EXISTS share_links (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
