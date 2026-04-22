@@ -88,6 +88,7 @@ async function createTodo(data) {
   renderTodos();
   renderTray();
   updateStats();
+  fetchCalendarForCurrentView();
   toast('Aufgabe erstellt', 'success');
 }
 
@@ -350,7 +351,7 @@ function showSlotPicker(isoDate, hour, x, y) {
 
   popup.querySelector('#slotPickerCustom').addEventListener('click', () => {
     popup.remove();
-    openAddTodo();
+    openAddTodo({ isoDate, hour });
   });
 
   document.body.appendChild(popup);
@@ -574,7 +575,7 @@ function openCalEntryModal(todo) {
 
   document.getElementById('calEntryTitle').textContent = 'Aufgabe einplanen';
   document.getElementById('calEntryTodoName').textContent = todo.title;
-  document.getElementById('calEntryDate').value = dateToISO(new Date());
+  document.getElementById('calEntryDate').value = todo.deadline || dateToISO(new Date());
   document.getElementById('calEntryStart').value = '08:00';
   const endH = Math.min(23, 8 + Math.ceil(todo.duration_hours));
   document.getElementById('calEntryEnd').value = `${String(endH).padStart(2,'0')}:00`;
@@ -671,16 +672,25 @@ document.getElementById('btnConflictKeep').addEventListener('click', () => {
 // ── Todo Modal ────────────────────────────────────────────
 let selectedPriority = 3;
 
-function openAddTodo() {
+function openAddTodo(prefill = null) {
   editingTodoId = null;
   document.getElementById('modalTodoTitle').textContent = 'Neue Aufgabe';
   document.getElementById('todoTitle').value = '';
   document.getElementById('todoDesc').value = '';
   document.getElementById('todoDuration').value = '1';
   document.getElementById('todoDeadline').value = '';
-  document.getElementById('todoCalDate').value = '';
-  document.getElementById('todoCalStart').value = '';
-  document.getElementById('todoCalEnd').value = '';
+
+  if (prefill && prefill.isoDate != null) {
+    const h = parseInt(prefill.hour);
+    const hasHour = !Number.isNaN(h);
+    document.getElementById('todoCalDate').value = prefill.isoDate;
+    document.getElementById('todoCalStart').value = hasHour ? `${String(h).padStart(2,'0')}:00` : '';
+    document.getElementById('todoCalEnd').value   = hasHour ? `${String(Math.min(23, h + 1)).padStart(2,'0')}:00` : '';
+  } else {
+    document.getElementById('todoCalDate').value = '';
+    document.getElementById('todoCalStart').value = '';
+    document.getElementById('todoCalEnd').value = '';
+  }
 
   setPriority(3);
   openModal('modalTodo');
@@ -762,6 +772,7 @@ document.getElementById('btnSaveTodo').addEventListener('click', async () => {
     renderTray();
     updateStats();
     toast('Aufgabe erstellt', 'success');
+    fetchCalendarForCurrentView();
   }
 
   // Kalendereintrag anlegen wenn Datum + Zeit angegeben
