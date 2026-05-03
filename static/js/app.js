@@ -691,6 +691,7 @@ function openAddTodo(prefill = null) {
     document.getElementById('todoCalStart').value = '';
     document.getElementById('todoCalEnd').value = '';
   }
+  document.getElementById('todoCalRecurrence').value = 'once';
 
   setPriority(3);
   openModal('modalTodo');
@@ -710,6 +711,7 @@ function openEditTodo(todo) {
   document.getElementById('todoCalDate').value  = existing ? existing.entry_date  : '';
   document.getElementById('todoCalStart').value = existing ? existing.start_time  : '';
   document.getElementById('todoCalEnd').value   = existing ? existing.end_time    : '';
+  document.getElementById('todoCalRecurrence').value = existing ? existing.recurrence || 'once' : 'once';
 
 
   openModal('modalTodo');
@@ -753,6 +755,7 @@ document.getElementById('btnSaveTodo').addEventListener('click', async () => {
   const calDate  = document.getElementById('todoCalDate').value;
   const calStart = document.getElementById('todoCalStart').value;
   const calEnd   = document.getElementById('todoCalEnd').value;
+  const calRecurrence = document.getElementById('todoCalRecurrence').value || 'once';
 
   closeModal('modalTodo');
 
@@ -792,7 +795,7 @@ document.getElementById('btnSaveTodo').addEventListener('click', async () => {
       start_time: calStart,
       end_time:   calEnd,
       title:      savedTodo.title,
-      recurrence: 'once',
+      recurrence: calRecurrence,
       profile:    currentProfile,
     });
     fetchCalendarForCurrentView();

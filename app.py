@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request, render_template
 import sqlite3
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import secrets
 import hashlib
 
@@ -19,10 +19,6 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
-    # Check if calendar_entries table exists and has the new columns
-    c.execute("PRAGMA table_info(calendar_entries)")
-    existing_columns = [row['name'] for row in c.fetchall()]
-
     c.execute('''
         CREATE TABLE IF NOT EXISTS todos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +31,23 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         )
     ''')
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS calendar_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            todo_id INTEGER,
+            entry_date TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            title TEXT DEFAULT '',
+            recurrence TEXT DEFAULT 'once',
+            profile TEXT DEFAULT 'me',
+            FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
+        )
+    ''')
+
+    c.execute("PRAGMA table_info(calendar_entries)")
+    existing_columns = [row['name'] for row in c.fetchall()]
 
     # Migrate potentially missing columns from older DB versions
     expected_cols = ['title', 'recurrence', 'profile']
@@ -151,42 +164,55 @@ def get_calendar():
     '''
     params = [profile]
     if start and end:
-        query += ' AND ce.entry_date BETWEEN ? AND ?'
-        params += [start, end]
+        query += '''
+            AND (
+                (ce.recurrence = 'once' AND ce.entry_date BETWEEN ? AND ?)
+                OR (ce.recurrence != 'once' AND ce.entry_date <= ?)
+            )
+        '''
+        params += [start, end, end]
     query += ' ORDER BY ce.entry_date, ce.start_time'
 
     entries = conn.execute(query, params).fetchall()
     conn.close()
 
-    # Wiederkehrende Einträge expandieren
+    # Wiederkehrende Einträge für den sichtbaren Zeitraum expandieren.
     result = []
+    start_d = date.fromisoformat(start) if start and end else None
+    end_d = date.fromisoformat(end) if start and end else None
     for e in entries:
         d = dict(e)
         d['title'] = d.pop('display_title')
-        result.append(d)
-        if d['recurrence'] == 'weekly' and start and end:
+        if not start_d or d['recurrence'] == 'once':
+            result.append(d)
+            continue
+
+        base = date.fromisoformat(d['entry_date'])
+        if start_d <= base <= end_d:
+            result.append(d)
+
+        if d['recurrence'] == 'weekly':
             base = date.fromisoformat(d['entry_date'])
-            cur  = base + __import__('datetime').timedelta(weeks=1)
-            end_d = date.fromisoformat(end)
+            cur  = base + timedelta(weeks=1)
             while cur <= end_d:
-                copy = dict(d)
-                copy['entry_date'] = cur.isoformat()
-                copy['id'] = f"virtual_{d['id']}_{cur.isoformat()}"
-                result.append(copy)
-                cur += __import__('datetime').timedelta(weeks=1)
-        elif d['recurrence'] == 'daily' and start and end:
+                if cur >= start_d:
+                    copy = dict(d)
+                    copy['entry_date'] = cur.isoformat()
+                    copy['id'] = f"virtual_{d['id']}_{cur.isoformat()}"
+                    result.append(copy)
+                cur += timedelta(weeks=1)
+        elif d['recurrence'] == 'daily':
             base  = date.fromisoformat(d['entry_date'])
-            end_d = date.fromisoformat(end)
-            cur   = base + __import__('datetime').timedelta(days=1)
+            cur   = base + timedelta(days=1)
             while cur <= end_d:
-                copy = dict(d)
-                copy['entry_date'] = cur.isoformat()
-                copy['id'] = f"virtual_{d['id']}_{cur.isoformat()}"
-                result.append(copy)
-                cur += __import__('datetime').timedelta(days=1)
-        elif d['recurrence'] == 'yearly' and start and end:
+                if cur >= start_d:
+                    copy = dict(d)
+                    copy['entry_date'] = cur.isoformat()
+                    copy['id'] = f"virtual_{d['id']}_{cur.isoformat()}"
+                    result.append(copy)
+                cur += timedelta(days=1)
+        elif d['recurrence'] == 'yearly':
             base  = date.fromisoformat(d['entry_date'])
-            end_d = date.fromisoformat(end)
             for y in range(base.year + 1, end_d.year + 2):
                 try:
                     cur = base.replace(year=y)

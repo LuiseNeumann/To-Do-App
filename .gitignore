@@ -1,5 +1,3 @@
 .venv
-pyproject.toml
-uv.lock
-.python-version
 __pycache__
+app.db
