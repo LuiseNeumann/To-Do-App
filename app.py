@@ -27,10 +27,16 @@ def init_db():
             priority INTEGER DEFAULT 3,
             duration_hours REAL DEFAULT 1.0,
             deadline TEXT DEFAULT NULL,
+            recurrence TEXT DEFAULT 'once',
             completed INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         )
     ''')
+
+    c.execute("PRAGMA table_info(todos)")
+    todo_columns = [row['name'] for row in c.fetchall()]
+    if 'recurrence' not in todo_columns:
+        c.execute("ALTER TABLE todos ADD COLUMN recurrence TEXT DEFAULT 'once'")
 
     c.execute('''
         CREATE TABLE IF NOT EXISTS calendar_entries (
@@ -92,14 +98,15 @@ def create_todo():
     conn = get_db()
     c = conn.cursor()
     c.execute('''
-        INSERT INTO todos (title, description, priority, duration_hours, deadline)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO todos (title, description, priority, duration_hours, deadline, recurrence)
+        VALUES (?, ?, ?, ?, ?, ?)
     ''', (
         data.get('title', 'Neues ToDo'),
         data.get('description', ''),
         data.get('priority', 3),
         data.get('duration_hours', 1.0),
-        data.get('deadline', None)
+        data.get('deadline', None),
+        data.get('recurrence', 'once')
     ))
     todo_id = c.lastrowid
     conn.commit()
@@ -113,7 +120,7 @@ def update_todo(todo_id):
     conn = get_db()
     fields = []
     values = []
-    for field in ['title', 'description', 'priority', 'duration_hours', 'deadline', 'completed']:
+    for field in ['title', 'description', 'priority', 'duration_hours', 'deadline', 'recurrence', 'completed']:
         if field in data:
             fields.append(f'{field} = ?')
             values.append(data[field])

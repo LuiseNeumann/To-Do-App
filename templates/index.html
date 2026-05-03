@@ -257,6 +257,15 @@
           <input type="date" id="todoDeadline" />
         </div>
         <div class="form-group">
+          <label>Wiederholung</label>
+          <select id="todoRecurrence">
+            <option value="once">Einmalig</option>
+            <option value="daily">Täglich</option>
+            <option value="weekly">Wöchentlich</option>
+            <option value="yearly">Jährlich</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>Kalender-Eintrag</label>
           <div class="form-row">
             <div class="form-group" style="margin-bottom:0;">
@@ -268,15 +277,6 @@
             <div class="form-group" style="margin-bottom:0;">
               <input type="time" id="todoCalEnd" placeholder="Bis" />
             </div>
-          </div>
-          <div class="form-group" style="margin-top:12px;margin-bottom:0;">
-            <label>Wiederholung</label>
-            <select id="todoCalRecurrence">
-              <option value="once">Einmalig</option>
-              <option value="daily">Täglich</option>
-              <option value="weekly">Wöchentlich</option>
-              <option value="yearly">Jährlich</option>
-            </select>
           </div>
         </div>
       </div>

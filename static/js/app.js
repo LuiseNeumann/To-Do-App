@@ -46,6 +46,7 @@ function isOverdue(dateStr) {
   return new Date(dateStr + 'T23:59:59') < new Date();
 }
 const PRIO_LABELS = {5:'Höchste', 4:'Hoch', 3:'Mittel', 2:'Niedrig', 1:'Minimal'};
+const RECURRENCE_LABELS = {once:'Einmalig', daily:'Täglich', weekly:'Wöchentlich', yearly:'Jährlich'};
 
 function toast(msg, type='info') {
   const el = document.createElement('div');
@@ -207,6 +208,9 @@ function buildTodoCard(todo) {
   const deadlineTag = todo.deadline
     ? `<span class="tag tag-dead${isOverdue(todo.deadline) && !todo.completed ? ' overdue' : ''}">📅 ${fmt(todo.deadline)}</span>`
     : '';
+  const recurrenceTag = todo.recurrence && todo.recurrence !== 'once'
+    ? `<span class="tag tag-rec">${RECURRENCE_LABELS[todo.recurrence] || todo.recurrence}</span>`
+    : '';
 
   card.innerHTML = `
     <button class="todo-check" title="Erledigt">${todo.completed ? '✓' : ''}</button>
@@ -217,6 +221,7 @@ function buildTodoCard(todo) {
         <span class="tag tag-prio">★ ${todo.priority} – ${PRIO_LABELS[todo.priority]}</span>
         <span class="tag tag-dur">⏱ ${formatDuration(todo.duration_hours)}</span>
         ${deadlineTag}
+        ${recurrenceTag}
       </div>
     </div>
     <div class="todo-actions">
@@ -250,6 +255,13 @@ function formatDuration(h) {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function setSelectedRecurrence(value = 'once') {
+  selectedRecurrence = value;
+  document.querySelectorAll('.rec-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === selectedRecurrence);
+  });
 }
 
 // ── Tray Rendering ────────────────────────────────────────
@@ -556,7 +568,7 @@ function handleDrop(isoDate, hourStr, endHourStr) {
     start_time: startTime,
     end_time: endTime,
     title: todo.title,
-    recurrence: selectedRecurrence,
+    recurrence: todo.recurrence || 'once',
     profile: currentProfile,
   });
 }
@@ -566,12 +578,7 @@ let calEntryTodoContext = null;
 
 function openCalEntryModal(todo) {
   calEntryTodoContext = todo;
-
-  // Recurrence zurücksetzen
-  selectedRecurrence = 'once';
-  document.querySelectorAll('.rec-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.val === 'once');
-  });
+  setSelectedRecurrence(todo.recurrence || 'once');
 
   document.getElementById('calEntryTitle').textContent = 'Aufgabe einplanen';
   document.getElementById('calEntryTodoName').textContent = todo.title;
@@ -585,12 +592,7 @@ function openCalEntryModal(todo) {
 
 function openCalEntryModalWithDate(todo, isoDate, hourStr) {
   if (todo) {
-    // Recurrence zurücksetzen
-  selectedRecurrence = 'once';
-  document.querySelectorAll('.rec-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.val === 'once');
-  });
-
+    setSelectedRecurrence(todo.recurrence || 'once');
     calEntryTodoContext = todo;
     document.getElementById('calEntryTodoName').textContent = todo.title;
   }
@@ -691,7 +693,7 @@ function openAddTodo(prefill = null) {
     document.getElementById('todoCalStart').value = '';
     document.getElementById('todoCalEnd').value = '';
   }
-  document.getElementById('todoCalRecurrence').value = 'once';
+  document.getElementById('todoRecurrence').value = 'once';
 
   setPriority(3);
   openModal('modalTodo');
@@ -705,13 +707,13 @@ function openEditTodo(todo) {
   document.getElementById('todoDesc').value = todo.description || '';
   document.getElementById('todoDuration').value = todo.duration_hours;
   document.getElementById('todoDeadline').value = todo.deadline || '';
+  document.getElementById('todoRecurrence').value = todo.recurrence || 'once';
   setPriority(todo.priority);
 
   const existing = calendarEntries.find(e => e.todo_id === todo.id);
   document.getElementById('todoCalDate').value  = existing ? existing.entry_date  : '';
   document.getElementById('todoCalStart').value = existing ? existing.start_time  : '';
   document.getElementById('todoCalEnd').value   = existing ? existing.end_time    : '';
-  document.getElementById('todoCalRecurrence').value = existing ? existing.recurrence || 'once' : 'once';
 
 
   openModal('modalTodo');
@@ -750,12 +752,12 @@ document.getElementById('btnSaveTodo').addEventListener('click', async () => {
     priority:       selectedPriority,
     duration_hours: parseFloat(document.getElementById('todoDuration').value) || 1,
     deadline:       document.getElementById('todoDeadline').value || null,
+    recurrence:     document.getElementById('todoRecurrence').value || 'once',
   };
 
   const calDate  = document.getElementById('todoCalDate').value;
   const calStart = document.getElementById('todoCalStart').value;
   const calEnd   = document.getElementById('todoCalEnd').value;
-  const calRecurrence = document.getElementById('todoCalRecurrence').value || 'once';
 
   closeModal('modalTodo');
 
@@ -795,7 +797,7 @@ document.getElementById('btnSaveTodo').addEventListener('click', async () => {
       start_time: calStart,
       end_time:   calEnd,
       title:      savedTodo.title,
-      recurrence: calRecurrence,
+      recurrence: savedTodo.recurrence || 'once',
       profile:    currentProfile,
     });
     fetchCalendarForCurrentView();
