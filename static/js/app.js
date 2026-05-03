@@ -546,7 +546,7 @@ function onDragEnd() {
   dragTodoId = null;
 }
 
-function handleDrop(isoDate, hourStr, endHourStr) {
+async function handleDrop(isoDate, hourStr, endHourStr) {
   if (!dragTodoId) return;
   const todo = todos.find(t => t.id === dragTodoId);
   if (!todo) return;
@@ -562,15 +562,20 @@ function handleDrop(isoDate, hourStr, endHourStr) {
   const endMins = Math.round((todo.duration_hours % 1) * 60);
   const endTime = `${String(endH).padStart(2,'0')}:${String(endMins).padStart(2,'0')}`;
 
-  createCalEntry({
+  const recurrence = todo.recurrence || 'once';
+  const ok = await createCalEntry({
     todo_id: todo.id,
     entry_date: isoDate,
     start_time: startTime,
     end_time: endTime,
     title: todo.title,
-    recurrence: todo.recurrence || 'once',
+    recurrence,
     profile: currentProfile,
   });
+  if (ok !== false && recurrence !== 'once') {
+    if (currentProfile === 'partner') fetchPartnerCalendarForCurrentView();
+    else fetchCalendarForCurrentView();
+  }
 }
 
 // ── Calendar Entry Modal ──────────────────────────────────
